@@ -17,6 +17,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// CheckSudo detects whether the process is running via sudo by checking
+// the SUDO_USER environment variable. If set, it adjusts HOME to the
+// original user's home directory and returns true. Callers should exit
+// when this returns true — the tool should not be run as root.
 func CheckSudo() bool {
 	sudoUser := os.Getenv("SUDO_USER")
 	if sudoUser == "" {
@@ -52,6 +56,11 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// LoadConfig loads a Kubernetes client configuration. It tries, in order:
+//  1. The KUBECONFIG environment variable (if all listed files exist)
+//  2. ~/.kube/config (if KUBECONFIG is not set)
+//  3. /etc/rancher/k3s/k3s.yaml (read directly or via sudo cat)
+//  4. Falls back to default client-go loading rules
 func LoadConfig() (*rest.Config, *kubernetes.Clientset, error) {
 	k3sConfig := "/etc/rancher/k3s/k3s.yaml"
 
@@ -122,6 +131,8 @@ var sealedSecretGVR = schema.GroupVersionResource{
 	Resource: "sealedsecrets",
 }
 
+// FindSealedSecrets lists all SealedSecrets (bitnami.com/v1alpha1) across
+// all namespaces and returns their namespace/name references.
 func FindSealedSecrets(client dynamic.Interface) ([]SealedSecretRef, error) {
 	list, err := client.Resource(sealedSecretGVR).List(context.Background(), unstructuredListOptions())
 	if err != nil {
@@ -130,6 +141,8 @@ func FindSealedSecrets(client dynamic.Interface) ([]SealedSecretRef, error) {
 	return extractSealedSecretRefs(list), nil
 }
 
+// FindNamespacedSealedSecrets lists SealedSecrets (bitnami.com/v1alpha1) in
+// the given namespace and returns their namespace/name references.
 func FindNamespacedSealedSecrets(client dynamic.Interface, namespace string) ([]SealedSecretRef, error) {
 	list, err := client.Resource(sealedSecretGVR).
 		Namespace(namespace).
@@ -144,6 +157,7 @@ func unstructuredListOptions() metav1.ListOptions {
 	return metav1.ListOptions{}
 }
 
+// SealedSecretRef identifies a SealedSecret resource by namespace and name.
 type SealedSecretRef struct {
 	Namespace string
 	Name      string

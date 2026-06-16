@@ -15,11 +15,15 @@ var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 var passLineRe = regexp.MustCompile(`^([^A-Za-z]*)([A-Za-z][A-Za-z0-9./_-]*)$`)
 
+// Resource holds a parsed namespace/name pair from a CLI argument.
+// Name is empty when only a namespace was given.
 type Resource struct {
 	Namespace string
 	Name      string
 }
 
+// ParseResource parses a CLI argument string as a Kubernetes resource reference.
+// The input must be either "namespace" or "namespace/name".
 func ParseResource(s string) (Resource, error) {
 	parts := strings.Split(s, "/")
 	switch len(parts) {
@@ -32,6 +36,8 @@ func ParseResource(s string) (Resource, error) {
 	}
 }
 
+// Root returns the root path for secrets in the pass store,
+// formatted as "k8s/<hostname>".
 func Root() string {
 	host, err := os.Hostname()
 	if err != nil {
@@ -40,10 +46,13 @@ func Root() string {
 	return "k8s/" + host
 }
 
+// Store provides access to the unix pass password-store by shelling out
+// to the pass binary. The RunPass field can be replaced for testing.
 type Store struct {
 	RunPass func(args []string, stdin io.Reader) (string, string, error)
 }
 
+// New returns a Store that shells out to the real pass binary.
 func New() *Store {
 	return &Store{
 		RunPass: func(args []string, stdin io.Reader) (string, string, error) {
@@ -60,6 +69,10 @@ func New() *Store {
 	}
 }
 
+// ParsePassLines parses the tree output of "pass ls" and produces a flat list of
+// full paths. ANSI colour codes are stripped before matching. The prefix is
+// prepended to each discovered leaf to form the full path.
+// Returns the new parse index and the list of discovered paths.
 func ParsePassLines(prefix string, lines []string, index int) (int, []string, error) {
 	var entries []string
 	indent := -1
@@ -114,6 +127,9 @@ func ParsePassLines(prefix string, lines []string, index int) (int, []string, er
 	return index, entries, nil
 }
 
+// CollectKeys groups a flat list of pass paths into a map from secret path to
+// the list of keys belonging to that secret. The last path segment is treated
+// as the key and the rest as the secret path.
 func CollectKeys(paths []string) map[string][]string {
 	m := make(map[string][]string)
 	for _, p := range paths {
@@ -132,6 +148,7 @@ func subFolder(parent, child string) string {
 	return parent + "/" + child
 }
 
+// ListSecrets runs "pass ls <root>" and returns the flat list of secret paths.
 func (s *Store) ListSecrets(root string) ([]string, error) {
 	args := []string{"ls"}
 	if root != "" {
@@ -152,6 +169,8 @@ func (s *Store) ListSecrets(root string) ([]string, error) {
 	return result, nil
 }
 
+// GetSecret runs "pass show <path>" and returns the secret value with any
+// trailing newline stripped.
 func (s *Store) GetSecret(path string) (string, error) {
 	stdout, stderr, err := s.RunPass([]string{"show", path}, nil)
 	if err != nil {
@@ -163,6 +182,8 @@ func (s *Store) GetSecret(path string) (string, error) {
 	return strings.TrimRight(stdout, "\n"), nil
 }
 
+// InsertSecret writes a secret value to the pass store at the path
+// <Root()>/<namespace>/<name>/<key> using "pass insert --echo".
 func (s *Store) InsertSecret(namespace, name, key, value string) error {
 	path := fmt.Sprintf("%s/%s/%s/%s", Root(), namespace, name, key)
 	_, stderr, err := s.RunPass([]string{"insert", "--echo", path}, strings.NewReader(value))
