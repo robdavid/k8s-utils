@@ -18,23 +18,30 @@ import (
 )
 
 func main() {
+	var (
+		root     string
+		all      bool
+		allShort bool
+		noTrim   bool
+	)
 	if kubeutils.CheckSudo() {
 		fmt.Fprintf(os.Stderr, "This script should not be run as root\n")
 		os.Exit(1)
 	}
 
 	defaultRoot := pass.Root()
-	root := flag.String("root", defaultRoot, "The root folder for secrets in this cluster")
-	all := flag.Bool("all", false, "Apply all secrets in the pass database under the root")
-	allShort := flag.Bool("a", false, "Apply all secrets in the pass database under the root")
+	flag.StringVar(&root, "root", defaultRoot, "The root folder for secrets in this cluster")
+	flag.BoolVar(&all, "all", false, "Apply all secrets in the pass database under the root")
+	flag.BoolVar(&allShort, "a", false, "Apply all secrets in the pass database under the root")
+	flag.BoolVar(&noTrim, "no-trim", false, "Don't right trim secret strings")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: apply-secret [flags] [namespace[/name] ...]\n\nFlags:\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
-	if *allShort {
-		*all = true
+	if allShort {
+		all = true
 	}
 
 	args := flag.Args()
@@ -55,7 +62,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Error parsing %q: %v\n", arg, err)
 				os.Exit(1)
 			}
-			prefix := *root + "/" + res.Namespace
+			prefix := root + "/" + res.Namespace
 			if res.Name != "" {
 				prefix += "/" + res.Name
 			}
@@ -67,22 +74,22 @@ func main() {
 			bySecret := pass.CollectKeys(paths)
 			for path, keys := range bySecret {
 				if path == prefix || strings.HasPrefix(path, prefix+"/") {
-					if err := writeSecret(clientset, store, path, keys); err != nil {
+					if err := writeSecret(clientset, store, path, keys, noTrim); err != nil {
 						fmt.Fprintf(os.Stderr, "Error writing secret %s: %v\n", path, err)
 						os.Exit(1)
 					}
 				}
 			}
 		}
-	case *all:
-		paths, err := store.ListSecrets(*root)
+	case all:
+		paths, err := store.ListSecrets(root)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error listing secrets at %s: %v\n", *root, err)
+			fmt.Fprintf(os.Stderr, "Error listing secrets at %s: %v\n", root, err)
 			os.Exit(1)
 		}
 		bySecret := pass.CollectKeys(paths)
 		for path, keys := range bySecret {
-			if err := writeSecret(clientset, store, path, keys); err != nil {
+			if err := writeSecret(clientset, store, path, keys, noTrim); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing secret %s: %v\n", path, err)
 				os.Exit(1)
 			}
@@ -93,14 +100,14 @@ func main() {
 	}
 }
 
-func writeSecret(clientset kubernetes.Interface, store *pass.Store, path string, keys []string) error {
+func writeSecret(clientset kubernetes.Interface, store *pass.Store, path string, keys []string, noTrim bool) error {
 	parts := strings.Split(path, "/")
 	namespace := parts[len(parts)-2]
 	name := parts[len(parts)-1]
 
 	data := make(map[string][]byte)
 	for _, key := range keys {
-		val, err := store.GetSecret(path + "/" + key)
+		val, err := store.GetSecret(path+"/"+key, noTrim)
 		if err != nil {
 			return fmt.Errorf("reading key %s: %w", key, err)
 		}

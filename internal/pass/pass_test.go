@@ -89,16 +89,16 @@ func TestCollectKeys(t *testing.T) {
 	}
 	grouped := CollectKeys(parsed)
 	expected := map[string][]string{
-		"k8s/amycus/davical/davical-app":               {"password"},
-		"k8s/amycus/davical/davical-dba":               {"password"},
-		"k8s/amycus/default/redis-password":            {"password"},
-		"k8s/amycus/home-assistant/mosquitto-auth":     {"HA"},
-		"k8s/amycus/nextcloud/admin":                   {"password", "username"},
-		"k8s/amycus/nextcloud/postgres":                {"password", "postgres-password", "username"},
-		"k8s/amycus/nextcloud/redis-password":          {"password"},
-		"k8s/amycus/photoprism/database":               {"mariadb-password", "mariadb-root-password"},
-		"k8s/amycus/photoprism/photoprism-database":    {"PHOTOPRISM_DATABASE_NAME", "PHOTOPRISM_DATABASE_PASSWORD", "PHOTOPRISM_DATABASE_SERVER", "PHOTOPRISM_DATABASE_USER"},
-		"k8s/amycus/photoprism/ui-password":            {"PHOTOPRISM_ADMIN_PASSWORD"},
+		"k8s/amycus/davical/davical-app":            {"password"},
+		"k8s/amycus/davical/davical-dba":            {"password"},
+		"k8s/amycus/default/redis-password":         {"password"},
+		"k8s/amycus/home-assistant/mosquitto-auth":  {"HA"},
+		"k8s/amycus/nextcloud/admin":                {"password", "username"},
+		"k8s/amycus/nextcloud/postgres":             {"password", "postgres-password", "username"},
+		"k8s/amycus/nextcloud/redis-password":       {"password"},
+		"k8s/amycus/photoprism/database":            {"mariadb-password", "mariadb-root-password"},
+		"k8s/amycus/photoprism/photoprism-database": {"PHOTOPRISM_DATABASE_NAME", "PHOTOPRISM_DATABASE_PASSWORD", "PHOTOPRISM_DATABASE_SERVER", "PHOTOPRISM_DATABASE_USER"},
+		"k8s/amycus/photoprism/ui-password":         {"PHOTOPRISM_ADMIN_PASSWORD"},
 	}
 	if !reflect.DeepEqual(grouped, expected) {
 		t.Fatalf("got:\n%v\nexpected:\n%v", grouped, expected)
@@ -177,7 +177,7 @@ func TestGetSecret(t *testing.T) {
 			return "myvalue\n", "", nil
 		},
 	}
-	val, err := store.GetSecret("mypath")
+	val, err := store.GetSecret("mypath", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,12 +192,13 @@ func TestGetSecretMultiLine(t *testing.T) {
 			return "line1\nline2\n", "", nil
 		},
 	}
-	val, err := store.GetSecret("x")
+	val, err := store.GetSecret("x", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if val != "line1\nline2" {
-		t.Fatalf("got %q, want %q", val, "line1\nline2")
+	// Imbedded linefeeds implies preserve trailing ones
+	if val != "line1\nline2\n" {
+		t.Fatalf("got %q, want %q", val, "line1\nline2\n")
 	}
 }
 

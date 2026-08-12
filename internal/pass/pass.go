@@ -170,8 +170,8 @@ func (s *Store) ListSecrets(root string) ([]string, error) {
 }
 
 // GetSecret runs "pass show <path>" and returns the secret value with any
-// trailing newline stripped.
-func (s *Store) GetSecret(path string) (string, error) {
+// trailing newline stripped, unless noTrim is specified.
+func (s *Store) GetSecret(path string, noTrim bool) (string, error) {
 	stdout, stderr, err := s.RunPass([]string{"show", path}, nil)
 	if err != nil {
 		return "", fmt.Errorf("pass show: %w", err)
@@ -179,7 +179,11 @@ func (s *Store) GetSecret(path string) (string, error) {
 	if stderr != "" {
 		fmt.Fprint(os.Stderr, stderr)
 	}
-	return strings.TrimRight(stdout, "\n"), nil
+	if trimmed := strings.TrimRight(stdout, "\n"); noTrim || strings.Contains(trimmed, "\n") {
+		return stdout, nil
+	} else {
+		return trimmed, nil
+	}
 }
 
 // InsertSecret writes a secret value to the pass store at the path
